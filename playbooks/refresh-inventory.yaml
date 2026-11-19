@@ -1,0 +1,79 @@
+
+---
+- name: Refresh AWS EC2 inventory
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars_files:
+    - ../vars/aws.yaml
+
+  vars:
+    target_node_names:
+      - master01
+      - master02
+      - worker01
+      - worker02
+
+    target_nodes: >-
+      {{
+        machines_info
+        | selectattr('name', 'in', target_node_names)
+        | list
+      }}
+
+  tasks:
+    - name: Get current EC2 instance information
+      amazon.aws.ec2_instance_info:
+        region: "{{ aws_region }}"
+        profile: "{{ aws_profile }}"
+        filters:
+          "tag:KubesprayCluster": "{{ aws_cluster_name }}"
+          "instance-state-name": [running]
+      register: ec2_info
+
+    - name: Verify all target nodes are running
+      ansible.builtin.assert:
+        that:
+          - matched | length == 1
+        fail_msg: >-
+          {{ item.name }} was not found as a unique
+          running EC2 instance.
+      vars:
+        matched: >-
+          {{
+            ec2_info.instances
+            | selectattr('tags.Node', 'equalto', item.name)
+            | list
+          }}
+      loop: "{{ target_nodes }}"
+
+    - name: Verify IP addresses exist
+      ansible.builtin.assert:
+        that:
+          - instance.public_ip_address is defined
+          - instance.private_ip_address is defined
+      vars:
+        instance: >-
+          {{
+            ec2_info.instances
+            | selectattr('tags.Node', 'equalto', item.name)
+            | first
+          }}
+      loop: "{{ target_nodes }}"
+
+    - name: Regenerate inventory.ini
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../templates/inventory.ini.j2"
+        dest: "{{ playbook_dir }}/../inventory.ini"
+        mode: '0600'
+
+    - name: Show updated inventory
+      ansible.builtin.command:
+        cmd: cat "{{ playbook_dir }}/../inventory.ini"
+      register: inventory_output
+      changed_when: false
+
+    - name: Display updated inventory
+      ansible.builtin.debug:
+        msg: "{{ inventory_output.stdout_lines }}"

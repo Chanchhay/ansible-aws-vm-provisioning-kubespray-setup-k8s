@@ -1,0 +1,33 @@
+# Generated automatically from live AWS EC2 instance data.
+# Re-run the provisioning playbook after a stop/start that changes ephemeral IPs.
+[all]
+{% for node in target_nodes %}
+{% set instance = (ec2_info.instances | selectattr('tags.Node', 'equalto', node.name) | first) %}
+{{ node.name }} ansible_host={{ instance.public_ip_address }} ip={{ instance.private_ip_address }} access_ip={{ instance.private_ip_address }}
+{% endfor %}
+
+[all:vars]
+ansible_user={{ ansible_ssh_user }}
+ansible_ssh_private_key_file={{ ssh_private_key_path }}
+ansible_python_interpreter=/usr/bin/python3
+ansible_become=true
+ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
+
+[kube_control_plane]
+{% for node in target_nodes if node.role == 'master' %}
+{{ node.name }}
+{% endfor %}
+
+[etcd]
+{% for node in target_nodes if node.role == 'master' %}
+{{ node.name }}
+{% endfor %}
+
+[kube_node]
+{% for node in target_nodes if node.role == 'worker' %}
+{{ node.name }}
+{% endfor %}
+
+[k8s_cluster:children]
+kube_control_plane
+kube_node
