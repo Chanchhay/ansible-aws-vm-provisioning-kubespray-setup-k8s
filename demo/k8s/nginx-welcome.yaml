@@ -1,0 +1,42 @@
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-welcome
+  namespace: react-demo
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: nginx-welcome
+  template:
+    metadata:
+      labels:
+        app: nginx-welcome
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:stable-alpine
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-service
+  namespace: react-demo
+spec:
+  type: ClusterIP
+  selector:
+    app: nginx-welcome
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80

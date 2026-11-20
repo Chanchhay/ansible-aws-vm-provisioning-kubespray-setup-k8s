@@ -1,0 +1,90 @@
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: edge-system
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: edge-nginx-config
+  namespace: edge-system
+data:
+  nginx.conf: |
+    worker_processes auto;
+    error_log /dev/stderr info;
+
+    events {
+        worker_connections 1024;
+    }
+
+    stream {
+        upstream ingress_http {
+            server 172.31.1.203:30080;
+            server 172.31.44.17:30080;
+        }
+
+        upstream ingress_https {
+            server 172.31.1.203:30443;
+            server 172.31.44.17:30443;
+        }
+
+        server {
+            listen 80;
+            proxy_pass ingress_http;
+            proxy_connect_timeout 5s;
+            proxy_timeout 10m;
+        }
+
+        server {
+            listen 443;
+            proxy_pass ingress_https;
+            proxy_connect_timeout 5s;
+            proxy_timeout 10m;
+        }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: edge-nginx
+  namespace: edge-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: edge-nginx
+  template:
+    metadata:
+      labels:
+        app: edge-nginx
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: worker02
+
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+
+      containers:
+        - name: nginx
+          image: nginx:1.31.9-alpine
+          ports:
+            - containerPort: 80
+            - containerPort: 443
+
+          readinessProbe:
+            tcpSocket:
+              port: 80
+            initialDelaySeconds: 3
+            periodSeconds: 10
+
+          volumeMounts:
+            - name: config
+              mountPath: /etc/nginx/nginx.conf
+              subPath: nginx.conf
+              readOnly: true
+
+      volumes:
+        - name: config
+          configMap:
+            name: edge-nginx-config

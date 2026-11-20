@@ -1,0 +1,16 @@
+
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: kagea-site-certificate
+  namespace: react-demo
+spec:
+  secretName: kagea-site-tls
+
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+
+  dnsNames:
+    - k8s.kagea.site
+    - k8s-nginx.kagea.site
